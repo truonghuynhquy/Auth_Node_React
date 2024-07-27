@@ -19,7 +19,7 @@ const generateAccessToken = (user) => {
   return jwt.sign(
     { id: user._id, username: user.username },
     process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: "30s" }
+    { expiresIn: "30m" }
   );
 };
 
@@ -63,6 +63,7 @@ export const login = async (req, res) => {
   }
 };
 
+// Middleware
 export const tokenController = async (req, res, next) => {
   const refreshToken = req.cookies.refreshToken;
   if (!refreshToken) return res.sendStatus(401);
@@ -71,16 +72,20 @@ export const tokenController = async (req, res, next) => {
     const user = await User.findOne({ refreshToken });
     if (!user) return res.sendStatus(403);
 
-    jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
+    jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, data) => {
       if (err) return res.sendStatus(403);
 
-      const accessToken = generateAccessToken(user);
+      data = { _id: data.id, ...data };
+      delete data.id;
+
+      const accessToken = generateAccessToken(data);
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         maxAge: 15 * 60 * 1000,
       });
-      console.log(accessToken, "Token refreshed");
-      next();
+      res
+        .status(200)
+        .json({ accessToken, refreshToken, message: "Token refreshed" });
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -88,13 +93,6 @@ export const tokenController = async (req, res, next) => {
 };
 
 export const getUser = async (req, res) => {
-  try {
-    const user = await User.find();
-    if (!user) res.status(400).json("Users not found!");
-    res.status(200).json({ user });
-  } catch (error) {
-    res.status(500).json({
-      error: error.message,
-    });
-  }
+  const { _id, username } = req.user;
+  res.status(200).json({ id: _id, username });
 };
